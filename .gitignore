@@ -1,0 +1,12 @@
+# IDEs
+.idea/
+
+# Scala / sbt
+target
+
+
+# OS X
+.DS_Store
+
+# other
+.history
