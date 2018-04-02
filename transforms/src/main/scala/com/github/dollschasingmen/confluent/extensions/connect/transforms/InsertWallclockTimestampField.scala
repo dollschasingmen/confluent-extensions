@@ -1,11 +1,8 @@
 package com.github.dollschasingmen.confluent.extensions.connect.transforms
 
-import org.apache.kafka.common.cache.Cache
-import org.apache.kafka.common.cache.LRUCache
-import org.apache.kafka.common.cache.SynchronizedCache
 import org.apache.kafka.common.config.ConfigDef
 import org.apache.kafka.connect.connector.ConnectRecord
-import org.apache.kafka.connect.data.{ Schema, SchemaBuilder, Struct, Timestamp }
+import org.apache.kafka.connect.data.{ SchemaBuilder, Struct, Timestamp }
 import org.apache.kafka.connect.transforms.util.SimpleConfig
 import org.apache.kafka.connect.transforms.util.SchemaUtil
 import java.util.Calendar
@@ -25,6 +22,7 @@ import scala.collection.JavaConversions._
 class InsertWallclockTimestampField[R <: ConnectRecord[R]] extends org.apache.kafka.connect.transforms.Transformation[R] {
   val DEFAULT_TIMESTAMP_FIELD = "updatedAt"
   private val PURPOSE = "wall clock timestamp field insertion"
+  private val MAX_CACHE_SIZE = 16
 
   private object ConfigName {
     val TIMESTAMP_FIELD = "timestamp.field"
@@ -41,14 +39,23 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]] extends org.apache.ka
       "Field name for wall clock timestamp"
     )
 
-  private var schemaUpdateCache: Cache[Schema, Schema] = new SynchronizedCache[Schema, Schema](new LRUCache[Schema, Schema](16))
+  private val cache: SchemaEvolvingCache = new SchemaEvolvingCache(schema => {
+    val builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct)
+
+    for (field <- schema.fields) {
+      builder.field(field.name, field.schema)
+    }
+
+    builder.field(timestampField, Timestamp.SCHEMA)
+    builder.build
+  }, MAX_CACHE_SIZE)
 
   override def config(): ConfigDef = CONFIG_DEF
 
   override def configure(props: util.Map[String, _]): Unit = {
     val config = new SimpleConfig(CONFIG_DEF, props)
     timestampField = config.getString(ConfigName.TIMESTAMP_FIELD)
-    resetCache()
+    cache.reset()
   }
 
   override def apply(record: R): R = {
@@ -60,9 +67,7 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]] extends org.apache.ka
     }
   }
 
-  override def close(): Unit = {
-    resetCache()
-  }
+  override def close(): Unit = cache.reset()
 
   private def applySchemaLess(record: R): R = {
     val value = requireMap(record.value, PURPOSE)
@@ -73,32 +78,9 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]] extends org.apache.ka
 
   private def applyWithSchema(record: R): R = {
     val value = requireStruct(record.value, PURPOSE)
-
-    val updatedSchema = Option(schemaUpdateCache.get(value.schema)) match {
-      case Some(schema) => schema
-      case None =>
-        val updatedSchema = makeUpdatedSchema(value.schema)
-        schemaUpdateCache.put(value.schema, updatedSchema)
-        updatedSchema
-    }
-
-    val updatedValue = new Struct(updatedSchema)
+    val evolvedSchema = cache.getOrElseUpdate(value.schema())
+    val updatedValue = new Struct(evolvedSchema)
     updatedValue.put(timestampField, Calendar.getInstance().getTime)
-    record.newRecord(record.topic, record.kafkaPartition, record.keySchema, record.key, updatedSchema, updatedValue, record.timestamp)
-  }
-
-  private def makeUpdatedSchema(schema: Schema) = {
-    val builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct)
-
-    for (field <- schema.fields) {
-      builder.field(field.name, field.schema)
-    }
-
-    builder.field(timestampField, Timestamp.SCHEMA)
-    builder.build
-  }
-
-  private def resetCache(): Unit = {
-    schemaUpdateCache = new SynchronizedCache[Schema, Schema](new LRUCache[Schema, Schema](16))
+    record.newRecord(record.topic, record.kafkaPartition, record.keySchema, record.key, evolvedSchema, updatedValue, record.timestamp)
   }
 }
