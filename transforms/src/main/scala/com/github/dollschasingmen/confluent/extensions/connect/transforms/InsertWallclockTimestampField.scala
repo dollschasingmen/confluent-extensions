@@ -2,11 +2,12 @@ package com.github.dollschasingmen.confluent.extensions.connect.transforms
 
 import org.apache.kafka.common.config.ConfigDef
 import org.apache.kafka.connect.connector.ConnectRecord
-import org.apache.kafka.connect.data.{ SchemaBuilder, Struct, Timestamp }
+import org.apache.kafka.connect.data.{ Schema, SchemaBuilder, Struct, Timestamp }
 import org.apache.kafka.connect.transforms.util.SimpleConfig
 import org.apache.kafka.connect.transforms.util.SchemaUtil
 import java.util.Calendar
 import java.util
+import scala.collection.JavaConversions._
 
 import org.apache.kafka.connect.transforms.util.Requirements.requireMap
 import org.apache.kafka.connect.transforms.util.Requirements.requireSinkRecord
@@ -46,7 +47,7 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]] extends org.apache.ka
       builder.field(field.name, field.schema)
     }
 
-    builder.field(timestampField, Timestamp.SCHEMA)
+    builder.field(timestampField, Schema.INT64_SCHEMA)
     builder.build
   }, MAX_CACHE_SIZE)
 
@@ -72,15 +73,22 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]] extends org.apache.ka
   private def applySchemaLess(record: R): R = {
     val value = requireMap(record.value, PURPOSE)
     val updatedValue = new util.HashMap[String, AnyRef](value)
-    updatedValue.put(timestampField, Calendar.getInstance().getTime)
+    updatedValue.put(timestampField, new java.lang.Long(Calendar.getInstance().getTimeInMillis))
     record.newRecord(record.topic, record.kafkaPartition, record.keySchema, record.key, null, updatedValue, record.timestamp)
   }
 
   private def applyWithSchema(record: R): R = {
     val value = requireStruct(record.value, PURPOSE)
     val evolvedSchema = cache.getOrElseUpdate(value.schema())
+
     val updatedValue = new Struct(evolvedSchema)
-    updatedValue.put(timestampField, Calendar.getInstance().getTime)
+
+    for (field <- value.schema.fields) {
+      updatedValue.put(field.name, value.get(field))
+    }
+
+    updatedValue.put(timestampField, new java.lang.Long(Calendar.getInstance().getTimeInMillis))
+
     record.newRecord(record.topic, record.kafkaPartition, record.keySchema, record.key, evolvedSchema, updatedValue, record.timestamp)
   }
 }

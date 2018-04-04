@@ -18,6 +18,9 @@ lazy val transforms = Project("confluent-extensions-connect-transforms", file("t
   .settings(
     libraryDependencies ++= Seq(
       Libraries.connectApi,
-      Libraries.connectTransforms
+      Libraries.connectTransforms,
+
+      // test
+      Libraries.scalatest
     )
   )
