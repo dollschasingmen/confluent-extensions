@@ -61,14 +61,10 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]] extends org.apache.ka
       throw new ConfigException(s"No value specified for ${ConfigName.TIMESTAMP_FIELD}")
     }
 
-    println("configured - timestamp field = " + wallClockTsField)
-
     cache.reset()
-    println("configured - timestamp field 2 = " + wallClockTsField)
   }
 
   override def apply(record: R): R = {
-    println("apply - timestamp field = " + wallClockTsField)
     requireSinkRecord(record, PURPOSE)
 
     Option(record.valueSchema) match {
