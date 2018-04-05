@@ -1,5 +1,4 @@
 package com.github.dollschasingmen.confluent.extensions.connect.transforms
-import java.util
 import java.util.Calendar
 
 import org.apache.kafka.connect.data.{ Schema, SchemaBuilder, Struct }
@@ -16,13 +15,13 @@ class InsertWallclockTimestampFieldSpec extends FlatSpec with Matchers with Befo
   }
 
   "InsertWallclockTimestampField#configure" should "throw exception if no timestamp.field is specified" in {
-    val prop = new util.HashMap[String, AnyRef]
+    val prop = new java.util.HashMap[String, AnyRef]
     an[org.apache.kafka.common.config.ConfigException] should be thrownBy xform.configure(prop)
   }
 
   "InsertWallclockTimestampField#transform" should "add an wall clock timestamp value for specified field name" in {
     // configure
-    val prop = new util.HashMap[String, AnyRef]
+    val prop = new java.util.HashMap[String, AnyRef]
     prop.put("timestamp.field", "updated_at")
     xform.configure(prop)
 

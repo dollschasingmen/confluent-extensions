@@ -6,40 +6,54 @@ import org.apache.kafka.connect.data.Schema
 import org.apache.kafka.connect.transforms.util.SimpleConfig
 import java.util._
 
-import com.github.dollschasingmen.confluent.extensions.connect.transforms.util.{ CopyMethods, SchemaEvolvingCache }
-
+import scala.collection.JavaConversions._
+import com.github.dollschasingmen.confluent.extensions.connect.transforms.util._
 import org.apache.kafka.connect.transforms.util.Requirements.requireMap
 import org.apache.kafka.connect.transforms.util.Requirements.requireSinkRecord
 import org.apache.kafka.connect.transforms.util.Requirements.requireStruct
 
-/**
- * "Insert the wall clock time the connect processes the record with a configurable field name.
- *
- * @tparam R
- */
-class InsertWallclockTimestampField[R <: ConnectRecord[R]]
+import scala.collection.mutable
+
+class InsertRuntimeField[R <: ConnectRecord[R]]
     extends org.apache.kafka.connect.transforms.Transformation[R] with CopyMethods {
 
-  private val PURPOSE = "wall clock timestamp field insertion"
+  private val PURPOSE = "Given a start time and end time field, calculate run time for record"
+  private val DEFAULT_RUNTIME_FIELD = "runtime"
 
   private object ConfigName {
-    val TIMESTAMP_FIELD = "timestamp.field"
+    val START_TIME = "field.start"
+    val END_TIME = "field.end"
+    val RUNTIME = "field.runtime"
   }
 
-  private var wallClockTsField: Option[String] = None
+  private var configHolder: mutable.Map[String, String] = mutable.Map.empty
 
   private val CONFIG_DEF = new ConfigDef()
     .define(
-      ConfigName.TIMESTAMP_FIELD,
+      ConfigName.START_TIME,
       ConfigDef.Type.STRING,
       null,
       ConfigDef.Importance.HIGH,
-      "Field name for wall clock timestamp"
+      "Field name for the start time"
+    )
+    .define(
+      ConfigName.END_TIME,
+      ConfigDef.Type.STRING,
+      null,
+      ConfigDef.Importance.MEDIUM,
+      "Field name for the end time"
+    )
+    .define(
+      ConfigName.RUNTIME,
+      ConfigDef.Type.STRING,
+      DEFAULT_RUNTIME_FIELD,
+      ConfigDef.Importance.MEDIUM,
+      "Field name for the runtime value"
     )
 
   private val cache: SchemaEvolvingCache = new SchemaEvolvingCache(schema => {
     val builder = copySchema(schema)
-    builder.field(wallClockTsField.get, Schema.INT64_SCHEMA)
+    builder.field(configHolder(ConfigName.RUNTIME), Schema.INT64_SCHEMA)
     builder.build
   })
 
@@ -48,10 +62,12 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]]
   override def configure(props: java.util.Map[String, _]): Unit = {
     val config = new SimpleConfig(CONFIG_DEF, props)
 
-    wallClockTsField = Option(config.getString(ConfigName.TIMESTAMP_FIELD))
+    config.values().keySet().foreach(k => {
+      configHolder.put(k, config.getString(k))
+    })
 
-    if (wallClockTsField.isEmpty) {
-      throw new ConfigException(s"No value specified for ${ConfigName.TIMESTAMP_FIELD}")
+    if (configHolder.get(ConfigName.START_TIME).isEmpty) {
+      throw new ConfigException(s"No value specified for ${ConfigName.START_TIME}")
     }
 
     cache.reset()
@@ -70,18 +86,40 @@ class InsertWallclockTimestampField[R <: ConnectRecord[R]]
 
   private def applySchemaLess(record: R): R = {
     val value = requireMap(record.value, PURPOSE)
+
     val updatedValue = new java.util.HashMap[String, AnyRef](value)
-    updatedValue.put(wallClockTsField.get, new java.lang.Long(Calendar.getInstance().getTimeInMillis))
+    updatedValue.put(
+      configHolder(ConfigName.RUNTIME),
+      calculateRuntime(MapRecordValue(value))
+    )
+
     record.newRecord(record.topic, record.kafkaPartition, record.keySchema, record.key, null, updatedValue, record.timestamp)
   }
 
   private def applyWithSchema(record: R): R = {
     val value = requireStruct(record.value, PURPOSE)
+
     val evolvedSchema = cache.getOrElseUpdate(value.schema())
 
     val updatedValue = copyStructWithSchema(value, evolvedSchema)
-    updatedValue.put(wallClockTsField.get, new java.lang.Long(Calendar.getInstance().getTimeInMillis))
+    updatedValue.put(
+      configHolder(ConfigName.RUNTIME),
+      calculateRuntime(StructRecordValue(value))
+    )
 
     record.newRecord(record.topic, record.kafkaPartition, record.keySchema, record.key, evolvedSchema, updatedValue, record.timestamp)
+  }
+
+  def calculateRuntime(value: RecordValue[String, AnyRef]): java.lang.Long = {
+    val startTime = value.get(
+      configHolder(ConfigName.START_TIME)
+    ).asInstanceOf[java.lang.Long]
+
+    val endTime = configHolder.get(ConfigName.END_TIME) match {
+      case Some(endTimeField) if endTimeField != null => value.get(endTimeField).asInstanceOf[java.lang.Long]
+      case _ => new java.lang.Long(Calendar.getInstance().getTimeInMillis)
+    }
+
+    endTime - startTime
   }
 }

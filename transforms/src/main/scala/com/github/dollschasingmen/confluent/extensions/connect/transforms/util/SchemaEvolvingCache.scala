@@ -1,9 +1,9 @@
-package com.github.dollschasingmen.confluent.extensions.connect.transforms
+package com.github.dollschasingmen.confluent.extensions.connect.transforms.util
 
 import org.apache.kafka.common.cache.{ LRUCache, SynchronizedCache }
 import org.apache.kafka.connect.data.Schema
 
-class SchemaEvolvingCache(evolveSchema: Schema => Schema, maxSize: Int) {
+class SchemaEvolvingCache(evolveSchema: Schema => Schema, maxSize: Int = 16) {
 
   private var cache = new SynchronizedCache[Schema, Schema](new LRUCache[Schema, Schema](maxSize))
 
