@@ -66,7 +66,7 @@ class InsertRuntimeField[R <: ConnectRecord[R]]
       configHolder.put(k, config.getString(k))
     })
 
-    if (configHolder.get(ConfigName.START_TIME).isEmpty) {
+    if (configHolder.fetch(ConfigName.START_TIME).isEmpty) {
       throw new ConfigException(s"No value specified for ${ConfigName.START_TIME}")
     }
 
@@ -115,11 +115,18 @@ class InsertRuntimeField[R <: ConnectRecord[R]]
       configHolder(ConfigName.START_TIME)
     ).asInstanceOf[java.lang.Long]
 
-    val endTime = configHolder.get(ConfigName.END_TIME) match {
-      case Some(endTimeField) if endTimeField != null => value.get(endTimeField).asInstanceOf[java.lang.Long]
-      case _ => new java.lang.Long(Calendar.getInstance().getTimeInMillis)
+    val endTime = configHolder.fetch(ConfigName.END_TIME) match {
+      case Some(endTimeField) => value.get(endTimeField).asInstanceOf[java.lang.Long]
+      case _                  => new java.lang.Long(Calendar.getInstance().getTimeInMillis)
     }
 
     endTime - startTime
+  }
+
+  implicit class MapImprovments(m: mutable.Map[String, String]) {
+    def fetch(k: String): Option[String] = m.get(k) match {
+      case Some(v) => Option(v)
+      case None    => None
+    }
   }
 }
