@@ -2,7 +2,6 @@ package com.github.dollschasingmen.confluent.extensions.connect.transforms
 
 import org.apache.kafka.common.config.ConfigDef
 import org.apache.kafka.connect.connector.ConnectRecord
-import org.apache.kafka.connect.data.{ Field, Schema, Struct }
 import com.github.dollschasingmen.confluent.extensions.connect.transforms.util.CopyMethods
 import org.apache.kafka.connect.transforms.util.Requirements.requireSinkRecord
 import org.apache.kafka.connect.transforms.util.Requirements.requireStruct
