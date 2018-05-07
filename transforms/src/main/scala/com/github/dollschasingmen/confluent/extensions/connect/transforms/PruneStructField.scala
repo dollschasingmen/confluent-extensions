@@ -5,7 +5,7 @@ import org.apache.kafka.connect.connector.ConnectRecord
 import com.github.dollschasingmen.confluent.extensions.connect.transforms.util.CopyMethods
 import org.apache.kafka.connect.transforms.util.Requirements.requireSinkRecord
 import org.apache.kafka.connect.transforms.util.Requirements.requireStruct
-import org.apache.kafka.connect.data.{ Field, Schema, SchemaBuilder, Struct }
+import org.apache.kafka.connect.data.{ Field, Schema, Struct }
 import scala.collection.JavaConversions._
 
 class PruneStructField[R <: ConnectRecord[R]]

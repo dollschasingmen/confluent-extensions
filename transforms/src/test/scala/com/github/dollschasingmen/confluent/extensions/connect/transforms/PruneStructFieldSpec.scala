@@ -45,14 +45,22 @@ class PruneStructFieldSpec extends FlatSpec with Matchers {
   val record = new SinkRecord("test", 0, null, null, recordSchema, recordStruct, 0L)
 
   "PruneStructField#apply" should "prune null optional fields from the map" in {
-
-    // transform record
-    println("input record: " + record)
-
     val xformedRecord = xform.apply(record)
     val xformedSchema = xformedRecord.valueSchema()
 
-    println("xformedRecord: " + xformedRecord)
+    // non null values should still exist
+    xformedRecord.value().asInstanceOf[Struct].getString("someAlpha") shouldEqual "X"
+
+    // empty nested should be removed
+    xformedRecord.valueSchema().field("empty") shouldEqual null
+
+    // pruned
+    record.valueSchema().field("nested").schema().field("notHere").schema() shouldEqual Schema.OPTIONAL_INT64_SCHEMA
+    record.valueSchema().field("nested").schema().field("here").schema() shouldEqual Schema.OPTIONAL_INT64_SCHEMA
+
+    xformedRecord.valueSchema().field("nested").schema().field("here").schema() shouldEqual Schema.OPTIONAL_INT64_SCHEMA
+    xformedRecord.value().asInstanceOf[Struct].getStruct("nested").getInt64("here") shouldEqual 42L
+    xformedRecord.valueSchema().field("nested").schema().field("notHere") shouldEqual null
   }
 
 }
